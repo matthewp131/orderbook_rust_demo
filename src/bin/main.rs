@@ -32,7 +32,6 @@ fn parse_args(args: Vec<String>) -> RuntimeConfig {
 fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBooks) {
     if let Some(value) = row.get(0) {                          
         if value.starts_with("#name: ") {
-            tx.send("".to_string()).unwrap();
             tx.send(row.as_slice().to_string()).unwrap();
         } else if value.starts_with("#descr:") {
             let mut s = row.get(0).unwrap().to_string();
@@ -41,7 +40,6 @@ fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBoo
                 s.push_str(row1);
             }
             tx.send(s).unwrap();
-            tx.send("".to_string()).unwrap();
         } else {
             match value {
                 "N" => {
