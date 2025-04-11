@@ -1,5 +1,6 @@
 //! The main file, which handles program start-up and command line arguments
 
+use std::sync::mpsc::Receiver;
 use std::thread;
 use std::sync::{mpsc, mpsc::Sender};
 use orderbook::order_books::OrderBooks;
@@ -29,6 +30,9 @@ fn parse_args(args: Vec<String>) -> RuntimeConfig {
         } else if arg.ends_with(".csv") {
             input_file = arg;
         }
+    }
+    if input_file.is_empty() {
+        panic!("No input file supplied")
     }
     RuntimeConfig::new(input_file, trading_enabled)
 }
@@ -81,35 +85,44 @@ fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBoo
     }
 }
 
+/// A function for running a reader thread which outputs results over `tx`
+fn reader_func(tx: Sender<String>, runtime_config: RuntimeConfig) {
+    let mut order_books = OrderBooks::new(runtime_config.trading_enabled);
+    if let Ok(mut reader) = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_path(&runtime_config.input_file) {
+        for line in reader.records() {
+            match line {
+                Ok(row) => {
+                    handle_row(row, &tx, &mut order_books);
+                },
+                Err(e) => println!("{e}")
+            }
+        }
+    } else {
+        panic!("Failed to open {}", runtime_config.input_file);
+    }
+}
+
+/// A function for running a writer thread which receives results over 'rx' and writes them to stdout
+fn writer_func(rx: Receiver<String>) {
+    for x in rx {
+        println!("{x}");
+    }
+}
+
 /// The main function takes in command line arguments, starts a reader thread which handles
 /// the input csv row-by-row, outputting the results over a Sender to the writer thread.
 /// The writer thread receives results and writes them to stdout. The program waits for both threads 
 /// to finish before exiting.
 fn main() {
-    let runtime_config = parse_args(env::args().collect());
-
-    let mut order_books = OrderBooks::new(runtime_config.trading_enabled);
-    
+    let runtime_config = parse_args(env::args().collect());    
     let (tx, rx) = mpsc::channel();
     
-    let reader_thread = thread::Builder::new().name("reader_thread".to_string()).spawn(move || {
-        let tx = tx;
-        if let Ok(mut reader) = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_path(runtime_config.input_file) {
-            for line in reader.records() {
-                match line {
-                    Ok(row) => {
-                        handle_row(row, &tx, &mut order_books);
-                    },
-                    Err(e) => println!("{e}")
-                }
-            }
-        }        
+    let reader_thread = thread::Builder::new().name("reader_thread".to_string()).spawn(|| {
+        reader_func(tx, runtime_config)
     }).unwrap();
 
-    let writer_thread = thread::Builder::new().name("writer_thread".to_string()).spawn(move || {
-        for x in rx {
-            println!("{x}");
-        }
+    let writer_thread = thread::Builder::new().name("writer_thread".to_string()).spawn(|| {
+        writer_func(rx)
     }).unwrap();
 
     reader_thread.join().unwrap();
