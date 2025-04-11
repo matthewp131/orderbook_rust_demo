@@ -4,19 +4,21 @@ use std::collections::BTreeMap;
 
 use crate::{order_result::OrderResult, order::{ExistingOrder, NewOrder, CancelOrder}};
 
+/// Describe the top of the current `OrderBook` for a particular side
 #[derive(PartialEq)]
-struct TopOfBook {
+pub struct TopOfBook {
     side: char,
     price: Option<u64>,
     total_quantity: Option<u64>
 }
 
 impl TopOfBook {
-    fn new(side: char, price: Option<u64>, total_quantity: Option<u64>) -> TopOfBook {
+    pub fn new(side: char, price: Option<u64>, total_quantity: Option<u64>) -> TopOfBook {
         TopOfBook { side, price, total_quantity }
     }
 
-    fn to_order_result(&self) -> OrderResult {
+    /// Change `TopOfBook` into `OrderResult`
+    pub fn to_order_result(&self) -> OrderResult {
         let price_string = match self.price {
             Some(price) => price.to_string(),
             None => "-".to_string()
@@ -296,6 +298,7 @@ impl OrderBook {
         let mut order_results = vec![];
 
         if let Some(order_book_location) = self.find_order_by_id(cancel_order.user, cancel_order.user_order_id) {
+            order_results.push(OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id });
             if order_book_location.side == 'B' {
                 let current_top = self.get_top_of_buy_book();
                 self.remove_order(order_book_location);

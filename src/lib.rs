@@ -5,3 +5,5 @@ pub mod order;
 pub mod order_book;
 pub mod order_books;
 pub mod orderbooks_tests;
+pub mod orderbook_tests;
+pub mod order_result_tests;

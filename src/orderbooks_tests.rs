@@ -1,7 +1,7 @@
 //! Unit tests for `OrderBooks`
 
 #[cfg(test)]
-mod orderbook_tests {
+mod orderbooks_tests {
     use crate::order_books::OrderBooks;
     use crate::order::*;
     use crate::order_result::*;
