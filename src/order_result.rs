@@ -1,3 +1,4 @@
+//! All possible results after a transaction message is processed inside OrderBooks
 #[derive(Debug, PartialEq)]
 pub enum OrderResult {
     Acknowledgement { user: u64, user_order_id: u64 },

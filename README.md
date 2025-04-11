@@ -6,6 +6,9 @@ This crate simulates an orderbook accepting limit orders for buying and selling,
 ### Install Rust and Cargo
 See https://www.rust-lang.org/tools/install for the latest Rust and Cargo tools for your OS.
 
+### Generate Documentation
+To see documentation, run `cargo doc --no-deps --open`
+
 ### Run without trading enabled
 `cargo run input_file.csv`
 ### Run with trading enabled
@@ -23,6 +26,7 @@ docker run -it --rm orderbook
 
 ## Unit tests
 Unit tests are provided covering all of the scenarios shown in output_file.csv. Run them with `cargo test --release -- --nocapture --test-threads 1` for accurate timing.
+See the optimize-order-cancellation branch for my attempt to improve order cancellation efficiency by storing order metadata in a separate data structure. While this eliminated some additional for-loops, the overall runtime performance was actually not noticably different. It's possible that the hash operations needed caused as much impact as the additional for loops, and that it would require many more orders present in the order book for this optimization to prove beneficial.
 
 ## Input
 The input CSV file may contain the following:
