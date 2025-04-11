@@ -1,8 +1,9 @@
 use std::collections::{HashMap, BTreeMap};
 use std::thread;
-use std::sync::{mpsc};
+use std::sync::{mpsc, mpsc::Sender};
 use chrono::{DateTime, Utc};
 use std::env;
+use csv::StringRecord;
 
 struct NewOrder {
     user: u64,
@@ -439,6 +440,55 @@ fn parse_args(args: Vec<String>) -> RuntimeConfig {
     RuntimeConfig::new(input_file, trading_enabled)
 }
 
+fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBooks) {
+    if let Some(value) = row.get(0) {                          
+        if value.starts_with("#name: ") {
+            tx.send("".to_string()).unwrap();
+            tx.send(row.as_slice().to_string()).unwrap();
+        } else if value.starts_with("#descr:") {
+            let mut s = row.get(0).unwrap().to_string();
+            if let Some(row1) = row.get(1) {
+                s.push_str(",");
+                s.push_str(row1);
+            }
+            tx.send(s).unwrap();
+            tx.send("".to_string()).unwrap();
+        } else {
+            match value {
+                "N" => {
+                    assert_eq!(row.len(), 7, "Invalid New Order: \"{}\"", row.as_slice().to_string());
+                    let new_order = NewOrder::new(
+                        row.get(1).unwrap().trim().parse::<u64>().unwrap(),
+                        row.get(2).unwrap().trim().to_string(),
+                        row.get(3).unwrap().trim().parse::<u64>().unwrap(),
+                        row.get(4).unwrap().trim().parse::<u64>().unwrap(),
+                        row.get(5).unwrap().trim().chars().nth(0).unwrap(),
+                        row.get(6).unwrap().trim().parse::<u64>().unwrap(),
+                        Utc::now()
+                    );
+                    let order_results = order_books.add_order(new_order);
+                    for order_result in order_results {
+                        tx.send(order_result.to_string()).unwrap();
+                    }
+                },
+                "C" => {
+                    assert_eq!(row.len(), 3, "Invalid Cancel Order: \"{}\"", row.as_slice().to_string());
+                    let cancel_order = CancelOrder::new(
+                        row.get(1).unwrap().trim().parse::<u64>().unwrap(),
+                        row.get(2).unwrap().trim().parse::<u64>().unwrap()
+                    );
+                    let order_results = order_books.cancel_order(cancel_order);
+                    for order_result in order_results {
+                        tx.send(order_result.to_string()).unwrap();
+                    }
+                },
+                "F" => order_books.flush(),
+                _ => ()
+            }
+        }
+    }
+}
+
 fn main() {
     let runtime_config = parse_args(env::args().collect());
 
@@ -452,52 +502,7 @@ fn main() {
             for line in reader.records() {
                 match line {
                     Ok(row) => {
-                        if let Some(value) = row.get(0) {                          
-                            if value.starts_with("#name: ") {
-                                tx.send("".to_string()).unwrap();
-                                tx.send(row.as_slice().to_string()).unwrap();
-                            } else if value.starts_with("#descr:") {
-                                let mut s = row.get(0).unwrap().to_string();
-                                if let Some(row1) = row.get(1) {
-                                    s.push_str(",");
-                                    s.push_str(row1);
-                                }
-                                tx.send(s).unwrap();
-                                tx.send("".to_string()).unwrap();
-                            } else {
-                                match value {
-                                    "N" => {
-                                        assert_eq!(row.len(), 7, "Invalid New Order: \"{}\"", row.as_slice().to_string());
-                                        let new_order = NewOrder::new(
-                                            row.get(1).unwrap().trim().parse::<u64>().unwrap(),
-                                            row.get(2).unwrap().trim().to_string(),
-                                            row.get(3).unwrap().trim().parse::<u64>().unwrap(),
-                                            row.get(4).unwrap().trim().parse::<u64>().unwrap(),
-                                            row.get(5).unwrap().trim().chars().nth(0).unwrap(),
-                                            row.get(6).unwrap().trim().parse::<u64>().unwrap(),
-                                            Utc::now()
-                                        );
-                                        let order_results = order_books.add_order(new_order);
-                                        for order_result in order_results {
-                                            tx.send(order_result.to_string()).unwrap();
-                                        }
-                                    },
-                                    "C" => {
-                                        assert_eq!(row.len(), 3, "Invalid Cancel Order: \"{}\"", row.as_slice().to_string());
-                                        let cancel_order = CancelOrder::new(
-                                            row.get(1).unwrap().trim().parse::<u64>().unwrap(),
-                                            row.get(2).unwrap().trim().parse::<u64>().unwrap()
-                                        );
-                                        let order_results = order_books.cancel_order(cancel_order);
-                                        for order_result in order_results {
-                                            tx.send(order_result.to_string()).unwrap();
-                                        }
-                                    },
-                                    "F" => order_books.flush(),
-                                    _ => ()
-                                }
-                            }
-                        }
+                        handle_row(row, &tx, &mut order_books);
                     },
                     Err(e) => println!("{e}")
                 }
