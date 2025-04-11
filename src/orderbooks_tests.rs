@@ -4,6 +4,7 @@ mod tests {
     use crate::order::*;
     use crate::order_result::*;
     use std::any::Any;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn scenario1() {
@@ -346,6 +347,7 @@ mod tests {
         ];
 
         let mut order_results: Vec<OrderResult> = vec![];
+        let start = Instant::now();
         for order in orders {
             if let Some(new_order) = order.downcast_ref::<NewOrder>() {
                 order_results.append(&mut order_books.add_order(new_order.clone()))
@@ -353,6 +355,8 @@ mod tests {
                 order_results.append(&mut order_books.cancel_order(cancel_order.clone()))
             }
         }
+        let duration = start.elapsed();
+        println!("Time elapsed in scenario9() is: {}ns", duration.as_nanos());
 
         assert_eq!(order_results[0], OrderResult::Acknowledgement { user: 1, user_order_id: 1 });
         assert_eq!(order_results[1], OrderResult::TopOfBookChange { side: 'B', price: "10".to_string(), total_quantity: "100".to_string() });
@@ -381,6 +385,7 @@ mod tests {
         ];
 
         let mut order_results: Vec<OrderResult> = vec![];
+        let start = Instant::now();
         for order in orders {
             if let Some(new_order) = order.downcast_ref::<NewOrder>() {
                 order_results.append(&mut order_books.add_order(new_order.clone()))
@@ -388,6 +393,8 @@ mod tests {
                 order_results.append(&mut order_books.cancel_order(cancel_order.clone()))
             }
         }
+        let duration = start.elapsed();
+        println!("Time elapsed in scenario9() is: {}ns", duration.as_nanos());
 
         assert_eq!(order_results[0], OrderResult::Acknowledgement { user: 1, user_order_id: 1 });
         assert_eq!(order_results[1], OrderResult::TopOfBookChange { side: 'B', price: "10".to_string(), total_quantity: "100".to_string() });
@@ -414,6 +421,7 @@ mod tests {
         ];
 
         let mut order_results: Vec<OrderResult> = vec![];
+        let start = Instant::now();
         for order in orders {
             if let Some(new_order) = order.downcast_ref::<NewOrder>() {
                 order_results.append(&mut order_books.add_order(new_order.clone()))
@@ -421,6 +429,8 @@ mod tests {
                 order_results.append(&mut order_books.cancel_order(cancel_order.clone()))
             }
         }
+        let duration = start.elapsed();
+        println!("Time elapsed in scenario9() is: {}ns", duration.as_nanos());
 
         assert_eq!(order_results[0], OrderResult::Acknowledgement { user: 1, user_order_id: 1 });
         assert_eq!(order_results[1], OrderResult::TopOfBookChange { side: 'B', price: "10".to_string(), total_quantity: "100".to_string() });
@@ -451,6 +461,7 @@ mod tests {
         ];
 
         let mut order_results: Vec<OrderResult> = vec![];
+        let start = Instant::now();
         for order in orders {
             if let Some(new_order) = order.downcast_ref::<NewOrder>() {
                 order_results.append(&mut order_books.add_order(new_order.clone()))
@@ -458,6 +469,8 @@ mod tests {
                 order_results.append(&mut order_books.cancel_order(cancel_order.clone()))
             }
         }
+        let duration = start.elapsed();
+        println!("Time elapsed in scenario9() is: {}ns", duration.as_nanos());
 
         assert_eq!(order_results[0], OrderResult::Acknowledgement { user: 1, user_order_id: 1 });
         assert_eq!(order_results[1], OrderResult::TopOfBookChange { side: 'B', price: "10".to_string(), total_quantity: "100".to_string() });
