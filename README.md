@@ -1,5 +1,5 @@
 # Orderbook Demo
-This crate simulates an orderbook accepting limit orders for buying and selling, with the option to support matching trades with the `-t` flag. Please see [Generate Documentation](#generate-documentation) for source code documentation. Please see [Runtime Complexity](#runtime-complexity) for info on time and space complexity and potential optimizations.
+This crate simulates an orderbook accepting limit orders for buying and selling, with the option to support matching trades with the `-t` flag. Please see [Generate Documentation](#generate-documentation) for source code documentation. Please see [Runtime Complexity](#runtime-complexity) for info on time and space complexity and potential optimizations. Please see [Run with Docker](#run-with-docker) for information on starting with either Docker or Docker Compose.
 
 ## Build and run locally
 
@@ -12,7 +12,9 @@ To see documentation, run `cargo doc --no-deps --open`
 ### Run without trading enabled
 `cargo run input_file.csv`
 ### Run with trading enabled
-`cargo run input_file.csv -t`
+`cargo run input_file.csv -t` or `cargo run input_file.csv --trading-enabled`
+### Run and pipe output to CSV
+`cargo run input_file.csv > output_file.csv`
 
 ## Run with Docker
 Note: the dockerfile has trading mode enabled by default. Remove '-t' from Dockerfile line 8 to run without trading enabled.
@@ -26,7 +28,7 @@ docker run -it --rm orderbook
 
 ## Unit tests
 Unit tests are provided covering all of the scenarios shown in output_file.csv. Run them with `cargo test --release -- --nocapture --test-threads 1` for accurate timing.
-See the optimize-order-cancellation branch for my attempt to improve order cancellation efficiency by storing order metadata in a separate data structure. While this eliminated some additional for-loops, the overall runtime performance was actually not noticably different. It's possible that the hash operations needed caused as much impact as the additional for loops, and that it would require many more orders present in the order book for this optimization to prove beneficial.
+See the optimize-order-cancellation branch for my attempt to improve order cancellation efficiency by storing order metadata in a separate data structure. While this eliminated some additional for-loops, the overall runtime performance was actually not noticably different. It's possible that the hash operations needed caused as much impact as the additional for loops, and that it would require many more orders present in the order book for this optimization to prove beneficial. Further detail is given in [Runtime Complexity](#runtime-complexity).
 
 ## Input
 The input CSV file may contain the following:
