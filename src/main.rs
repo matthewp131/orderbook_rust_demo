@@ -329,9 +329,14 @@ fn main() {
                         if let Some(value) = row.get(0) {                          
                             if value.starts_with("#name: ") {
                                 tx.send("".to_string()).unwrap();
-                                tx.send(value.to_string()).unwrap();
+                                tx.send(row.as_slice().to_string()).unwrap();
                             } else if value.starts_with("#descr:") {
-                                tx.send(value.to_string()).unwrap();
+                                let mut s = row.get(0).unwrap().to_string();
+                                if let Some(row1) = row.get(1) {
+                                    s.push_str(",");
+                                    s.push_str(row1);
+                                }
+                                tx.send(s).unwrap();
                                 tx.send("".to_string()).unwrap();
                             } else {
                                 match value {
