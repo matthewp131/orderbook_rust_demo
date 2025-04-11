@@ -1,7 +1,7 @@
 # Orderbook Demo
-This crate simulates an orderbook accepting limit orders for buying and selling, with the option to support matching trades with the `-t` flag. 
+This crate simulates an orderbook accepting limit orders for buying and selling, with the option to support matching trades with the `-t` flag. Please see [Generate Documentation](#generate-documentation) for source code documentation. Please see [Runtime Complexity](#runtime-complexity) for info on time and space complexity and potential optimizations.
 
-## Build and run
+## Build and run locally
 
 ### Install Rust and Cargo
 See https://www.rust-lang.org/tools/install for the latest Rust and Cargo tools for your OS.
@@ -68,3 +68,19 @@ The output may contain the following:
     ```
     T, 1, 1, 2, 101, 10, 100
     ````
+
+## Runtime Complexity
+### New Orders
+#### Time Complexity
+First, the `OrderBooks` struct must locate the proper `OrderBook` for the new order in its `all_orders: HashMap<String, OrderBook>` or make a new `OrderBook` for the new `symbol: String`. This can be done with O(1) complexity except in case of hashing collisions, where '1' is the theoretically constant time it takes to hash the key.
+Next, the `NewOrder` must be added to the proper `Orderbook`. Here, it must first be evaluated for crossing the book, which is O(1). If trading is enabled, matching the trade is an additional O(n*m) operation. This is of high complexity because, as per the output provided for scenario 13 (scenario 5 with trading), a buy order which crosses the book does not necessarily match to a sell order at the price of the buy order, but instead matches first to any sell order of equal quantity which is at a lesser price than the buy order. If this limitation were removed, and only exact matches of price and quantity were allowed, then matching the trade would become an O(n) operation. 
+#### Space Complexity
+Under the current implementation, orders are only stored in one data structure each, and no additional associating structures are used to decrease lookup time on order matching or cancellation. As discussed in [Unit tests](#unit-tests) above, an initial attempt to add association between (user, user_order_id) and an orderbook location did not improve performance. However, with a much larger set of orders, the additional time used to create the order metadata might yeild better performance when performing matching and cancellation.
+
+### Cancelling Orders
+#### Time Complexity
+At the `OrderBooks` level, because the symbol associated with the cancellation (user, user_order_id) is not known (See discussion in [Unit tests](#unit-tests) above regarding potential optimization), the cancellation must be attempted against each symbol, an O(n) operation. Within each `OrderBook`, the attempt at cancellation is O(n*m), searching through every order at every price level. 
+
+This appears terribly inefficient, which is why I added order metadata in the branch "optimize-order-cancellation", which reduces the time complexity to O(1) at the `OrderBooks` level and O(n) at the `OrderBook` level. However, I did not see shorter run times in unit tests on my machine. That could be an artifact of poor system timing on Windows, and I really expect that for large volumes of trades, the optimizations on the "optimize-order-cancellation" branch would be beneficial. This would require further investigation and experimentation.
+#### Space Complexity
+Cancelling an order removes its `ExistingOrder` from the proper `OrderBook`, and will remove the entire `Vec<ExistingOrder>` at that price level if it was the only entry.
