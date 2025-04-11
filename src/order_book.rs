@@ -76,33 +76,30 @@ impl OrderBook {
 
     /// Is `buy_price` above lowest price in `sell_orders`
     fn is_above_lowest_sell_price(&self, buy_price: u64) -> bool {
-        if self.sell_orders.len() == 0 {
-            false
-        } else {
-            let lowest_sell_price = self.sell_orders.keys().nth(0).unwrap();
+        if let Some(lowest_sell_price) = self.sell_orders.keys().nth(0) {
             buy_price >= *lowest_sell_price
+        } else {
+            false
         }
     }
 
     /// Is `sell_price` below highest price in `buy_orders`
     fn is_below_highest_buy_price(&self, sell_price: u64) -> bool {
-        if self.buy_orders.len() == 0 {
-            false
-        } else {
-            let highest_buy_price = self.buy_orders.keys().rev().nth(0).unwrap();
+        if let Some(highest_buy_price) = self.buy_orders.keys().rev().nth(0) {
             sell_price <= *highest_buy_price
+        } else {
+            false
         }
     }
 
     /// Get the highest price and quantity in `buy_orders`
     fn get_top_of_buy_book(&self) -> TopOfBook {
-        if self.buy_orders.is_empty() {
-            TopOfBook::new('B', None, None)
-        } else {
-            let top = self.buy_orders.iter().rev().nth(0).unwrap();
+        if let Some(top) = self.buy_orders.iter().rev().nth(0) {
             let price = *top.0;
             let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
             TopOfBook::new('B', Some(price), Some(total_quantity))
+        } else {
+            TopOfBook::new('B', None, None)
         }
     }
 
@@ -115,7 +112,7 @@ impl OrderBook {
         
         if let Some(v) = self.buy_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
-            v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap());
+            v.sort_by(|a, b| a.time_received.cmp(&b.time_received));
         } else {
             self.buy_orders.insert(new_order.price, vec![ExistingOrder::new(new_order)]);
         }
@@ -130,13 +127,12 @@ impl OrderBook {
 
     /// Get the lowest price and quantity in `sell_orders`
     fn get_top_of_sell_book(&self) -> TopOfBook {
-        if self.sell_orders.is_empty() {
-            TopOfBook::new('S', None, None)
-        } else {
-            let top = self.sell_orders.iter().nth(0).unwrap();
+        if let Some(top) = self.sell_orders.iter().nth(0) {
             let price = *top.0;
             let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
             TopOfBook::new('S', Some(price), Some(total_quantity))
+        } else {
+            TopOfBook::new('S', None, None)
         }
     }
 
@@ -149,7 +145,7 @@ impl OrderBook {
 
         if let Some(v) = self.sell_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
-            v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap());
+            v.sort_by(|a, b| a.time_received.cmp(&b.time_received));
         } else {
             self.sell_orders.insert(new_order.price, vec![ExistingOrder::new(new_order)]);
         }    

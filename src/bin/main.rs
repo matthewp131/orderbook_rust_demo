@@ -119,11 +119,11 @@ fn main() {
     
     let reader_thread = thread::Builder::new().name("reader_thread".to_string()).spawn(|| {
         reader_func(tx, runtime_config)
-    }).unwrap();
+    }).expect("Failed to start reader thread");
 
     let writer_thread = thread::Builder::new().name("writer_thread".to_string()).spawn(|| {
         writer_func(rx)
-    }).unwrap();
+    }).expect("Failed to start writer thread");
 
     reader_thread.join().unwrap();
     writer_thread.join().unwrap();
