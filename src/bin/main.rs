@@ -1,6 +1,5 @@
 use std::thread;
 use std::sync::{mpsc, mpsc::Sender};
-use chrono::Utc;
 use orderbook::order_books::OrderBooks;
 use std::env;
 use csv::StringRecord;
@@ -53,8 +52,7 @@ fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBoo
                         row.get(3).unwrap().trim().parse::<u64>().unwrap(),
                         row.get(4).unwrap().trim().parse::<u64>().unwrap(),
                         row.get(5).unwrap().trim().chars().nth(0).unwrap(),
-                        row.get(6).unwrap().trim().parse::<u64>().unwrap(),
-                        Utc::now()
+                        row.get(6).unwrap().trim().parse::<u64>().unwrap()
                     );
                     let order_results = order_books.add_order(new_order);
                     for order_result in order_results {
