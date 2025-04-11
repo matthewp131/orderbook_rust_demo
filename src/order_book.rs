@@ -1,76 +1,6 @@
-use std::collections::{HashMap, BTreeMap};
-use std::thread;
-use std::sync::{mpsc, mpsc::Sender};
-use chrono::{DateTime, Utc};
-use std::env;
-use csv::StringRecord;
+use std::collections::BTreeMap;
 
-struct NewOrder {
-    user: u64,
-    symbol: String,
-    price: u64,
-    qty: u64,
-    side: char,
-    user_order_id: u64,
-    time_received: DateTime<Utc>
-}
-
-impl NewOrder {
-    fn new(user: u64, symbol: String, price: u64, qty: u64, side: char, user_order_id: u64, time_received: DateTime<Utc>) -> NewOrder {
-        NewOrder { user, symbol, price, qty, side, user_order_id, time_received }
-    }
-}
-
-#[derive(Debug)]
-struct ExistingOrder {
-    user: u64,
-    price: u64,
-    qty: u64,
-    user_order_id: u64,
-    time_received: DateTime<Utc>
-}
-
-impl ExistingOrder {
-    fn new(new_order: NewOrder) -> ExistingOrder {
-        ExistingOrder {
-            user: new_order.user,
-            price: new_order.price,
-            qty: new_order.qty,
-            user_order_id: new_order.user_order_id,
-            time_received: new_order.time_received
-        }
-    }
-}
-
-struct CancelOrder {
-    user: u64,
-    user_order_id: u64
-}
-
-impl CancelOrder {
-    fn new(user: u64, user_order_id: u64) -> CancelOrder {
-        CancelOrder { user, user_order_id }
-    }
-}
-
-enum OrderResult {
-    Acknowledgement { user: u64, user_order_id: u64 },
-    Rejection { user: u64, user_order_id: u64 },
-    TopOfBookChange { side: char, price: String, total_quantity: String },
-    Trade { user_buy: u64, user_order_id_buy: u64, user_sell: u64, user_order_id_sell: u64, price: u64, qty: u64 }
-}
-
-impl ToString for OrderResult {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Acknowledgement { user, user_order_id } => format!("A, {}, {}", user, user_order_id),
-            Self::Rejection { user, user_order_id } => format!("R, {}, {}", user, user_order_id),
-            Self::TopOfBookChange { side, price, total_quantity} => format!("B, {}, {}, {}", side, price, total_quantity),
-            Self::Trade { user_buy, user_order_id_buy, user_sell, user_order_id_sell, price, qty } =>
-                format!("T, {}, {}, {}, {}, {}, {}", user_buy, user_order_id_buy, user_sell, user_order_id_sell, price, qty)
-        }
-    }
-}
+use crate::{order_result::OrderResult, order::{ExistingOrder, NewOrder, CancelOrder}};
 
 #[derive(PartialEq)]
 struct TopOfBook {
@@ -99,14 +29,6 @@ impl TopOfBook {
     }
 }
 
-struct OrderBook {
-    symbol: String,
-    // key is price; Vec<ExistingOrder> is sorted by time_received
-    buy_orders: BTreeMap<u64, Vec<ExistingOrder>>,
-    sell_orders: BTreeMap<u64, Vec<ExistingOrder>>,
-    trading_enabled: bool
-}
-
 struct OrderBookLocation {
     side: char,
     price: u64,
@@ -119,10 +41,18 @@ impl OrderBookLocation {
     }
 }
 
+pub struct OrderBook {
+    _symbol: String,
+    // key is price; Vec<ExistingOrder> is sorted by time_received
+    buy_orders: BTreeMap<u64, Vec<ExistingOrder>>,
+    sell_orders: BTreeMap<u64, Vec<ExistingOrder>>,
+    trading_enabled: bool
+}
+
 impl OrderBook {
-    fn new(symbol: &str, trading_enabled: bool) -> OrderBook {
+    pub fn new(symbol: &str, trading_enabled: bool) -> OrderBook {
         OrderBook {
-            symbol: symbol.to_string(),
+            _symbol: symbol.to_string(),
             buy_orders: BTreeMap::new(),
             sell_orders: BTreeMap::new(),
             trading_enabled
@@ -229,7 +159,7 @@ impl OrderBook {
         order_results  
     }
 
-    fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
+    pub fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         assert!(new_order.side == 'B' || new_order.side == 'S', "Invalid New Order. New order must be B or S.");
         if self.crosses_book(&new_order) {
             if self.trading_enabled {
@@ -349,7 +279,7 @@ impl OrderBook {
         }
     }
 
-    fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
+    pub fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
         
         let current_top = self.get_top_of_buy_book();
@@ -374,148 +304,4 @@ impl OrderBook {
 
         order_results
     }
-}
-
-struct OrderBooks {
-    all_orders: HashMap<String, OrderBook>,
-    trading_enabled: bool
-}
-
-impl OrderBooks {
-    fn new(trading_enabled: bool) -> OrderBooks {
-        OrderBooks {
-            all_orders: HashMap::new(),
-            trading_enabled
-        }
-    }
-
-    fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
-        if let Some(v) = self.all_orders.get_mut(&new_order.symbol) {
-            v.add_order(new_order)
-        } else {
-            let new_symbol = new_order.symbol.clone();
-            let mut new_order_book = OrderBook::new(&new_symbol, self.trading_enabled);
-            let order_results = new_order_book.add_order(new_order);
-            self.all_orders.insert(new_symbol, new_order_book);
-            order_results
-        }
-    }
-
-    fn cancel_order(&mut self, cancel_order: CancelOrder) -> Vec<OrderResult> {
-        let mut order_results = vec![OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id }];
-        
-        for order_book in self.all_orders.values_mut() {
-            order_results.append(&mut order_book.cancel_order(&cancel_order));
-        }
-
-        order_results
-    }
-
-    fn flush(&mut self) {
-        self.all_orders.clear()
-    }
-}
-
-struct RuntimeConfig {
-    input_file: String,
-    trading_enabled: bool
-}
-
-impl RuntimeConfig {
-    fn new(input_file: String, trading_enabled: bool) -> RuntimeConfig {
-        RuntimeConfig { input_file, trading_enabled }
-    }
-}
-
-fn parse_args(args: Vec<String>) -> RuntimeConfig {
-    let mut trading_enabled = false;
-    let mut input_file = String::new();
-    for arg in args {        
-        if arg == "-t" || arg == "--trading-enabled" {
-            trading_enabled = true;
-        } else if arg.ends_with(".csv") {
-            input_file = arg;
-        }
-    }
-    RuntimeConfig::new(input_file, trading_enabled)
-}
-
-fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBooks) {
-    if let Some(value) = row.get(0) {                          
-        if value.starts_with("#name: ") {
-            tx.send("".to_string()).unwrap();
-            tx.send(row.as_slice().to_string()).unwrap();
-        } else if value.starts_with("#descr:") {
-            let mut s = row.get(0).unwrap().to_string();
-            if let Some(row1) = row.get(1) {
-                s.push_str(",");
-                s.push_str(row1);
-            }
-            tx.send(s).unwrap();
-            tx.send("".to_string()).unwrap();
-        } else {
-            match value {
-                "N" => {
-                    assert_eq!(row.len(), 7, "Invalid New Order: \"{}\"", row.as_slice().to_string());
-                    let new_order = NewOrder::new(
-                        row.get(1).unwrap().trim().parse::<u64>().unwrap(),
-                        row.get(2).unwrap().trim().to_string(),
-                        row.get(3).unwrap().trim().parse::<u64>().unwrap(),
-                        row.get(4).unwrap().trim().parse::<u64>().unwrap(),
-                        row.get(5).unwrap().trim().chars().nth(0).unwrap(),
-                        row.get(6).unwrap().trim().parse::<u64>().unwrap(),
-                        Utc::now()
-                    );
-                    let order_results = order_books.add_order(new_order);
-                    for order_result in order_results {
-                        tx.send(order_result.to_string()).unwrap();
-                    }
-                },
-                "C" => {
-                    assert_eq!(row.len(), 3, "Invalid Cancel Order: \"{}\"", row.as_slice().to_string());
-                    let cancel_order = CancelOrder::new(
-                        row.get(1).unwrap().trim().parse::<u64>().unwrap(),
-                        row.get(2).unwrap().trim().parse::<u64>().unwrap()
-                    );
-                    let order_results = order_books.cancel_order(cancel_order);
-                    for order_result in order_results {
-                        tx.send(order_result.to_string()).unwrap();
-                    }
-                },
-                "F" => order_books.flush(),
-                _ => ()
-            }
-        }
-    }
-}
-
-fn main() {
-    let runtime_config = parse_args(env::args().collect());
-
-    let mut order_books = OrderBooks::new(runtime_config.trading_enabled);
-    
-    let (tx, rx) = mpsc::channel();
-    
-    let reader_thread = thread::Builder::new().name("reader_thread".to_string()).spawn(move || {
-        let tx = tx;
-        if let Ok(mut reader) = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_path(runtime_config.input_file) {
-            for line in reader.records() {
-                match line {
-                    Ok(row) => {
-                        handle_row(row, &tx, &mut order_books);
-                    },
-                    Err(e) => println!("{e}")
-                }
-            }
-        }        
-    }).unwrap();
-
-    let writer_thread = thread::Builder::new().name("writer_thread".to_string()).spawn(move || {
-        for x in rx {
-            println!("{x}");
-        }
-    }).unwrap();
-
-    reader_thread.join().unwrap();
-    writer_thread.join().unwrap();
 }
