@@ -22,7 +22,7 @@ docker run -it --rm orderbook
 `docker-compose up --build`
 
 ## Unit tests
-Unit tests are provided covering all of the scenarios shown in output_file.csv. Run them with `cargo test`.
+Unit tests are provided covering all of the scenarios shown in output_file.csv. Run them with `cargo test --release -- --nocapture --test-threads 1` for accurate timing.
 
 ## Input
 The input CSV file may contain the following:
