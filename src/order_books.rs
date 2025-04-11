@@ -35,7 +35,7 @@ impl OrderBooks {
 
     /// Search through each `OrderBook` attempting to cancel an existing order
     pub fn cancel_order(&mut self, cancel_order: CancelOrder) -> Vec<OrderResult> {
-        let mut order_results = vec![OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id }];
+        let mut order_results: Vec<OrderResult> = vec![];
         
         for order_book in self.all_orders.values_mut() {
             order_results.append(&mut order_book.cancel_order(&cancel_order));
