@@ -190,7 +190,7 @@ impl OrderBook {
         
         if new_order.side == 'B' {
             let current_top = self.get_top_of_sell_book();
-            if let Some(order_book_location) = self.match_order(&new_order, 'S') {
+            if let Some(order_book_location) = self.match_order(&new_order) {
                 let existing_order = self.remove_order(order_book_location);
                 order_results.push(OrderResult::Trade { 
                     user_buy: new_order.user, 
@@ -204,9 +204,9 @@ impl OrderBook {
                     order_results.push(new_top.to_order_result());
                 }
             }
-        } else {
+        } else if new_order.side == 'S' {
             let current_top = self.get_top_of_buy_book();
-            if let Some(order_book_location) = self.match_order(&new_order, 'B') {
+            if let Some(order_book_location) = self.match_order(&new_order) {
                 let existing_order = self.remove_order(order_book_location);
                 order_results.push(OrderResult::Trade { 
                     user_buy: existing_order.user, 
@@ -247,23 +247,23 @@ impl OrderBook {
 
     /// Match a `NewOrder` for one side of the book to an existing order on the other
     /// side of the book.
-    fn match_order(&self, new_order: &NewOrder, side: char) -> Option<OrderBookLocation> {
-        if side == 'S' {
+    fn match_order(&self, new_order: &NewOrder) -> Option<OrderBookLocation> {
+        if new_order.side == 'B' {
             for (price, existing_orders) in self.sell_orders.iter() {
                 if *price <= new_order.price {
                     for (index, existing_order) in existing_orders.iter().enumerate() {
                         if existing_order.qty == new_order.qty {
-                            return Some(OrderBookLocation::new(side, *price, index));
+                            return Some(OrderBookLocation::new('S', *price, index));
                         }
                     }
                 }
             }
-        } else if side == 'B' {
+        } else if new_order.side == 'S' {
             for (price, existing_orders) in self.buy_orders.iter() {
                 if *price >= new_order.price {
                     for (index, existing_order) in existing_orders.iter().enumerate() {
                         if existing_order.qty == new_order.qty {
-                            return Some(OrderBookLocation::new(side, *price, index));
+                            return Some(OrderBookLocation::new('B', *price, index));
                         }
                     }
                 }
