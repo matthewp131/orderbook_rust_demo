@@ -4,19 +4,17 @@ use crate::{order_result::OrderResult, order::{ExistingOrder, NewOrder, CancelOr
 
 #[derive(PartialEq)]
 struct TopOfBook {
+    side: char,
     price: Option<u64>,
     total_quantity: Option<u64>
 }
 
 impl TopOfBook {
-    fn new(price: Option<u64>, total_quantity: Option<u64>) -> TopOfBook {
-        TopOfBook { 
-            price, 
-            total_quantity 
-        }
+    fn new(side: char, price: Option<u64>, total_quantity: Option<u64>) -> TopOfBook {
+        TopOfBook { side, price, total_quantity }
     }
 
-    fn to_order_result(&self, side: char) -> OrderResult {
+    fn to_order_result(&self) -> OrderResult {
         let price_string = match self.price {
             Some(price) => price.to_string(),
             None => "-".to_string()
@@ -25,7 +23,7 @@ impl TopOfBook {
             Some(total_quantity) => total_quantity.to_string(),
             None => "-".to_string()
         };
-        OrderResult::TopOfBookChange { side, price: price_string, total_quantity: total_quantity_string }
+        OrderResult::TopOfBookChange { side: self.side, price: price_string, total_quantity: total_quantity_string }
     }
 }
 
@@ -88,12 +86,12 @@ impl OrderBook {
 
     fn get_top_of_buy_book(&self) -> TopOfBook {
         if self.buy_orders.is_empty() {
-            TopOfBook::new(None, None)
+            TopOfBook::new('B', None, None)
         } else {
             let top = self.buy_orders.iter().rev().nth(0).unwrap();
             let price = *top.0;
             let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
-            TopOfBook::new(Some(price), Some(total_quantity))
+            TopOfBook::new('B', Some(price), Some(total_quantity))
         }
     }
 
@@ -112,7 +110,7 @@ impl OrderBook {
 
         let new_top = self.get_top_of_buy_book();
         if new_top != current_top {
-            order_results.push(new_top.to_order_result('B'));
+            order_results.push(new_top.to_order_result());
         }
 
         order_results
@@ -120,12 +118,12 @@ impl OrderBook {
 
     fn get_top_of_sell_book(&self) -> TopOfBook {
         if self.sell_orders.is_empty() {
-            TopOfBook::new(None, None)
+            TopOfBook::new('S', None, None)
         } else {
             let top = self.sell_orders.iter().nth(0).unwrap();
             let price = *top.0;
             let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
-            TopOfBook::new(Some(price), Some(total_quantity))
+            TopOfBook::new('S', Some(price), Some(total_quantity))
         }
     }
 
@@ -144,7 +142,7 @@ impl OrderBook {
 
         let new_top = self.get_top_of_sell_book();
         if new_top != current_top {
-            order_results.push(new_top.to_order_result('S'));
+            order_results.push(new_top.to_order_result());
         }
 
         order_results  
@@ -185,7 +183,7 @@ impl OrderBook {
                     qty: existing_order.qty });
                 let new_top = self.get_top_of_sell_book();
                 if new_top != current_top {
-                    order_results.push(new_top.to_order_result('S'));
+                    order_results.push(new_top.to_order_result());
                 }
             }
         } else {
@@ -201,7 +199,7 @@ impl OrderBook {
                     qty: existing_order.qty });
                 let new_top = self.get_top_of_buy_book();
                 if new_top != current_top {
-                    order_results.push(new_top.to_order_result('B'));
+                    order_results.push(new_top.to_order_result());
                 }
             }
         }
@@ -280,14 +278,14 @@ impl OrderBook {
                 self.remove_order(order_book_location);
                 let new_top = self.get_top_of_buy_book();
                 if new_top != current_top {
-                    order_results.push(new_top.to_order_result('B'));
+                    order_results.push(new_top.to_order_result());
                 }
             } else if order_book_location.side == 'S' {
                 let current_top = self.get_top_of_sell_book();
                 self.remove_order(order_book_location);
                 let new_top = self.get_top_of_sell_book();
                 if new_top != current_top {
-                    order_results.push(new_top.to_order_result('S'));
+                    order_results.push(new_top.to_order_result());
                 }
             }
         }
