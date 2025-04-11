@@ -1,9 +1,6 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, BTreeMap};
-use std::hash::Hash;
 use std::thread;
-use std::sync::{mpsc, Arc};
-use std::sync::Mutex;
+use std::sync::{mpsc};
 use chrono::{DateTime, Utc};
 
 struct NewOrder {
@@ -92,9 +89,20 @@ impl TopOfBook {
             total_quantity 
         }
     }
+
+    fn to_order_result(&self, side: char) -> OrderResult {
+        let price_string = match self.price {
+            Some(price) => price.to_string(),
+            None => "-".to_string()
+        };
+        let total_quantity_string = match self.total_quantity {
+            Some(total_quantity) => total_quantity.to_string(),
+            None => "-".to_string()
+        };
+        OrderResult::TopOfBookChange { side, price: price_string, total_quantity: total_quantity_string }
+    }
 }
 
-#[derive(Debug)]
 struct OrderBook {
     symbol: String,
     // key is price; Vec<ExistingOrder> is sorted by time_received
@@ -153,8 +161,8 @@ impl OrderBook {
         } else {
             let top = self.buy_orders.iter().rev().nth(0).unwrap();
             let price = *top.0;
-            let totalQuantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
-            TopOfBook::new(Some(price), Some(totalQuantity))
+            let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
+            TopOfBook::new(Some(price), Some(total_quantity))
         }
     }
 
@@ -173,15 +181,7 @@ impl OrderBook {
 
         let new_top = self.get_top_of_buy_book();
         if new_top != current_top {
-            let price_string = match new_top.price {
-                Some(price) => price.to_string(),
-                None => "-".to_string()
-            };
-            let total_quantity_string = match new_top.total_quantity {
-                Some(total_quantity) => total_quantity.to_string(),
-                None => "-".to_string()
-            };
-            order_results.push(OrderResult::TopOfBookChange { side: 'B', price: price_string, total_quantity: total_quantity_string });
+            order_results.push(new_top.to_order_result('B'));
         }
 
         order_results   
@@ -193,13 +193,13 @@ impl OrderBook {
         } else {
             let top = self.sell_orders.iter().nth(0).unwrap();
             let price = *top.0;
-            let totalQuantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
-            TopOfBook::new(Some(price), Some(totalQuantity))
+            let total_quantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
+            TopOfBook::new(Some(price), Some(total_quantity))
         }
     }
 
     fn add_sell_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
-        let current_top = self.get_top_of_buy_book();
+        let current_top = self.get_top_of_sell_book();
         
         let mut order_results = vec![];
         order_results.push(OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id});
@@ -213,15 +213,7 @@ impl OrderBook {
 
         let new_top = self.get_top_of_sell_book();
         if new_top != current_top {
-            let price_string = match new_top.price {
-                Some(price) => price.to_string(),
-                None => "-".to_string()
-            };
-            let total_quantity_string = match new_top.total_quantity {
-                Some(total_quantity) => total_quantity.to_string(),
-                None => "-".to_string()
-            };
-            order_results.push(OrderResult::TopOfBookChange { side: 'S', price: price_string, total_quantity: total_quantity_string });
+            order_results.push(new_top.to_order_result('S'));
         }
 
         order_results  
@@ -238,6 +230,50 @@ impl OrderBook {
         } else {
             vec![]
         }
+    }
+
+    fn clean_buy_orders(&mut self) {
+        let prices = self.buy_orders.iter()
+            .filter(|(_, existing_orders)| existing_orders.len() == 0)
+            .map(|(price, _)| *price).collect::<Vec<u64>>();
+        for price in prices {
+            self.buy_orders.remove(&price);
+        }
+    }
+
+    fn clean_sell_orders(&mut self) {
+        let prices = self.sell_orders.iter()
+            .filter(|(_, existing_orders)| existing_orders.len() == 0)
+            .map(|(price, _)| *price).collect::<Vec<u64>>();
+        for price in prices {
+            self.sell_orders.remove(&price);
+        }
+    }
+
+    fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
+        let mut order_results = vec![];
+        
+        let current_top = self.get_top_of_buy_book();
+        for existing_orders in self.buy_orders.values_mut() {
+            existing_orders.retain(|existing_order| !(existing_order.user == cancel_order.user && existing_order.user_order_id == cancel_order.user_order_id));
+        }
+        self.clean_buy_orders();
+        let new_top = self.get_top_of_buy_book();
+        if new_top != current_top {
+            order_results.push(new_top.to_order_result('B'));
+        }
+        
+        let current_top = self.get_top_of_sell_book();
+        for existing_orders in self.sell_orders.values_mut() {
+            existing_orders.retain(|existing_order| !(existing_order.user == cancel_order.user && existing_order.user_order_id == cancel_order.user_order_id));
+        }
+        self.clean_sell_orders();
+        let new_top = self.get_top_of_sell_book();
+        if new_top != current_top {
+            order_results.push(new_top.to_order_result('S'));
+        }
+
+        order_results
     }
 }
 
@@ -264,6 +300,16 @@ impl OrderBooks {
         }
     }
 
+    fn cancel_order(&mut self, cancel_order: CancelOrder) -> Vec<OrderResult> {
+        let mut order_results = vec![OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id }];
+        
+        for order_book in self.all_orders.values_mut() {
+            order_results.append(&mut order_book.cancel_order(&cancel_order));
+        }
+
+        order_results
+    }
+
     fn flush(&mut self) {
         self.all_orders.clear()
     }
@@ -280,13 +326,13 @@ fn main() {
             for line in reader.records() {
                 match line {
                     Ok(row) => {
-                        if let Some(value) = row.get(0) {  
-                            // let value = value.to_string();                          
+                        if let Some(value) = row.get(0) {                          
                             if value.starts_with("#name: ") {
+                                tx.send("".to_string()).unwrap();
                                 tx.send(value.to_string()).unwrap();
                             } else if value.starts_with("#descr:") {
                                 tx.send(value.to_string()).unwrap();
-                                tx.send("\n".to_string()).unwrap();
+                                tx.send("".to_string()).unwrap();
                             } else {
                                 match value {
                                     "N" => {
@@ -305,7 +351,17 @@ fn main() {
                                             tx.send(order_result.to_string()).unwrap();
                                         }
                                     },
-                                    "C" => tx.send("C".to_string()).unwrap(),
+                                    "C" => {
+                                        assert_eq!(row.len(), 3, "Invalid Cancel Order: \"{}\"", row.as_slice().to_string());
+                                        let cancel_order = CancelOrder::new(
+                                            row.get(1).unwrap().trim().parse::<u64>().unwrap(),
+                                            row.get(2).unwrap().trim().parse::<u64>().unwrap()
+                                        );
+                                        let order_results = order_books.cancel_order(cancel_order);
+                                        for order_result in order_results {
+                                            tx.send(order_result.to_string()).unwrap();
+                                        }
+                                    },
                                     "F" => order_books.flush(),
                                     _ => ()
                                 }
