@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::hash::Hash;
 use std::thread;
 use std::sync::{mpsc, Arc};
@@ -65,13 +65,14 @@ impl CancelOrder {
 
 enum OrderResult {
     Acknowledgement { user: u64, user_order_id: u64 },
-
+    Rejection { user: u64, user_order_id: u64 }
 }
 
 impl ToString for OrderResult {
     fn to_string(&self) -> String {
         match self {
-            Self::Acknowledgement { user, user_order_id } => format!("A, {}, {}", user, user_order_id)
+            Self::Acknowledgement { user, user_order_id } => format!("A, {}, {}", user, user_order_id),
+            Self::Rejection { user, user_order_id } => format!("R, {}, {}", user, user_order_id)
         }
     }
 }
@@ -80,23 +81,58 @@ impl ToString for OrderResult {
 struct OrderBook {
     symbol: String,
     // key is price; Vec<ExistingOrder> is sorted by time_received
-    buy_orders: HashMap<u64, Vec<ExistingOrder>>,
-    sell_orders: HashMap<u64, Vec<ExistingOrder>>
+    buy_orders: BTreeMap<u64, Vec<ExistingOrder>>,
+    sell_orders: BTreeMap<u64, Vec<ExistingOrder>>
 }
 
 impl OrderBook {
     fn new(symbol: &str) -> OrderBook {
         OrderBook {
             symbol: symbol.to_string(),
-            buy_orders: HashMap::new(),
-            sell_orders: HashMap::new()
+            buy_orders: BTreeMap::new(),
+            sell_orders: BTreeMap::new()
+        }
+    }
+
+    fn crosses_book(&self, new_order: &NewOrder) -> bool {
+        if new_order.side == 'B' {
+            if self.is_above_lowest_sell_price(new_order.price) {
+                true
+            } else {
+                false
+            }
+        } else if new_order.side == 'S' {
+            if self.is_below_highest_buy_price(new_order.price) {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn is_above_lowest_sell_price(&self, buy_price: u64) -> bool {
+        if self.sell_orders.len() == 0 {
+            false
+        } else {
+            let lowest_sell_price = self.sell_orders.keys().nth(0).unwrap();
+            buy_price >= *lowest_sell_price
+        }
+    }
+
+    fn is_below_highest_buy_price(&self, sell_price: u64) -> bool {
+        if self.buy_orders.len() == 0 {
+            false
+        } else {
+            let highest_buy_price = self.buy_orders.keys().rev().nth(0).unwrap();
+            sell_price <= *highest_buy_price
         }
     }
 
     fn add_buy_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
-        let order_info = OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id};
-        order_results.push(order_info);
+        order_results.push(OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id});
         if let Some(v) = self.buy_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
             v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap());
@@ -108,8 +144,7 @@ impl OrderBook {
 
     fn add_sell_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
-        let order_info = OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id};
-        order_results.push(order_info);
+        order_results.push(OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id});
         if let Some(v) = self.sell_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
             v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap().reverse());
@@ -120,7 +155,10 @@ impl OrderBook {
     }
 
     fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
-        if new_order.side == 'B' {
+        assert!(new_order.side == 'B' || new_order.side == 'S', "Invalid New Order. New order must be B or S.");
+        if self.crosses_book(&new_order) {
+            vec![OrderResult::Rejection { user: new_order.user, user_order_id: new_order.user_order_id }]
+        } else if new_order.side == 'B' {
             self.add_buy_order(new_order)
         } else if new_order.side == 'S' {
             self.add_sell_order(new_order)
