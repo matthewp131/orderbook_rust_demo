@@ -416,22 +416,27 @@ impl OrderBooks {
 }
 
 struct RuntimeConfig {
+    input_file: String,
     trading_enabled: bool
 }
 
 impl RuntimeConfig {
-    fn new(trading_enabled: bool) -> RuntimeConfig {
-        RuntimeConfig { trading_enabled }
+    fn new(input_file: String, trading_enabled: bool) -> RuntimeConfig {
+        RuntimeConfig { input_file, trading_enabled }
     }
 }
 
 fn parse_args(args: Vec<String>) -> RuntimeConfig {
-    for arg in args {
+    let mut trading_enabled = false;
+    let mut input_file = String::new();
+    for arg in args {        
         if arg == "-t" || arg == "--trading-enabled" {
-            return RuntimeConfig::new(true)
-        } 
+            trading_enabled = true;
+        } else if arg.ends_with(".csv") {
+            input_file = arg;
+        }
     }
-    RuntimeConfig::new(false)
+    RuntimeConfig::new(input_file, trading_enabled)
 }
 
 fn main() {
@@ -443,7 +448,7 @@ fn main() {
     
     let reader_thread = thread::Builder::new().name("reader_thread".to_string()).spawn(move || {
         let tx = tx;
-        if let Ok(mut reader) = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_path("input_file.csv") {
+        if let Ok(mut reader) = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_path(runtime_config.input_file) {
             for line in reader.records() {
                 match line {
                     Ok(row) => {
