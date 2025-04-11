@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 
+#[derive(Clone)]
 pub struct NewOrder {
     pub user: u64,
     pub symbol: String,
@@ -11,8 +12,8 @@ pub struct NewOrder {
 }
 
 impl NewOrder {
-    pub fn new(user: u64, symbol: String, price: u64, qty: u64, side: char, user_order_id: u64, time_received: DateTime<Utc>) -> NewOrder {
-        NewOrder { user, symbol, price, qty, side, user_order_id, time_received }
+    pub fn new(user: u64, symbol: String, price: u64, qty: u64, side: char, user_order_id: u64) -> NewOrder {
+        NewOrder { user, symbol, price, qty, side, user_order_id, time_received: Utc::now() }
     }
 }
 
@@ -37,6 +38,7 @@ impl ExistingOrder {
     }
 }
 
+#[derive(Clone)]
 pub struct CancelOrder {
     pub user: u64,
     pub user_order_id: u64

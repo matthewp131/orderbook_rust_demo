@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq)]
 pub enum OrderResult {
     Acknowledgement { user: u64, user_order_id: u64 },
     Rejection { user: u64, user_order_id: u64 },
