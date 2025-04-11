@@ -186,7 +186,7 @@ impl OrderBook {
         
         if new_order.side == 'B' {
             let current_top = self.get_top_of_sell_book();
-            if let Some(order_book_location) = self.match_order(&new_order) {
+            if let Some(order_book_location) = self.match_order(&new_order, 'S') {
                 let existing_order = self.remove_order(order_book_location);
                 order_results.push(OrderResult::Trade { 
                     user_buy: new_order.user, 
@@ -200,9 +200,9 @@ impl OrderBook {
                     order_results.push(new_top.to_order_result());
                 }
             }
-        } else if new_order.side == 'S' {
+        } else {
             let current_top = self.get_top_of_buy_book();
-            if let Some(order_book_location) = self.match_order(&new_order) {
+            if let Some(order_book_location) = self.match_order(&new_order, 'B') {
                 let existing_order = self.remove_order(order_book_location);
                 order_results.push(OrderResult::Trade { 
                     user_buy: existing_order.user, 
@@ -241,25 +241,23 @@ impl OrderBook {
         }
     }
 
-    /// Match a `NewOrder` for one side of the book to an existing order on the other
-    /// side of the book.
-    fn match_order(&self, new_order: &NewOrder) -> Option<OrderBookLocation> {
-        if new_order.side == 'B' {
+    fn match_order(&self, new_order: &NewOrder, side: char) -> Option<OrderBookLocation> {
+        if side == 'S' {
             for (price, existing_orders) in self.sell_orders.iter() {
                 if *price <= new_order.price {
                     for (index, existing_order) in existing_orders.iter().enumerate() {
                         if existing_order.qty == new_order.qty {
-                            return Some(OrderBookLocation::new('S', *price, index));
+                            return Some(OrderBookLocation::new(side, *price, index));
                         }
                     }
                 }
             }
-        } else if new_order.side == 'S' {
+        } else if side == 'B' {
             for (price, existing_orders) in self.buy_orders.iter() {
                 if *price >= new_order.price {
                     for (index, existing_order) in existing_orders.iter().enumerate() {
                         if existing_order.qty == new_order.qty {
-                            return Some(OrderBookLocation::new('B', *price, index));
+                            return Some(OrderBookLocation::new(side, *price, index));
                         }
                     }
                 }
@@ -268,33 +266,27 @@ impl OrderBook {
         None
     }
 
-    /// Find an order in this `OrderBook` by `user` and `user_order_id`
-    fn find_order_by_id(&self, user: u64, user_order_id: u64) -> Option<OrderBookLocation> {
-        for (price, existing_orders) in self.sell_orders.iter() {
-            for (index, existing_order) in existing_orders.iter().enumerate() {
+    fn find_order_by_location(&self, side: char, price: u64, user: u64, user_order_id: u64) -> Option<OrderBookLocation> {
+        if side == 'B' {
+            for (index, existing_order) in self.buy_orders.get(&price).unwrap().iter().enumerate() {
                 if existing_order.user == user && existing_order.user_order_id == user_order_id {
-                    return Some(OrderBookLocation::new('S', *price, index));
+                    return Some(OrderBookLocation::new('B', price, index));
                 }
             }
-        }
-    
-        for (price, existing_orders) in self.buy_orders.iter() {
-            for (index, existing_order) in existing_orders.iter().enumerate() {
+        } else if side == 'S' {
+            for (index, existing_order) in self.sell_orders.get(&price).unwrap().iter().enumerate() {
                 if existing_order.user == user && existing_order.user_order_id == user_order_id {
-                    return Some(OrderBookLocation::new('B', *price, index));
+                    return Some(OrderBookLocation::new('S', price, index));
                 }
             }
         }
         None
     }
 
-    /// Search for order matching `cancel_order` in this `OrderBook` and remove the
-    /// order if found.
-    pub fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
+    pub fn cancel_order(&mut self, cancel_order: &CancelOrder, side: char, price: u64) -> Vec<OrderResult> {
         let mut order_results = vec![];
 
-        if let Some(order_book_location) = self.find_order_by_id(cancel_order.user, cancel_order.user_order_id) {
-            order_results.push(OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id });
+        if let Some(order_book_location) = self.find_order_by_location(side, price, cancel_order.user, cancel_order.user_order_id) {
             if order_book_location.side == 'B' {
                 let current_top = self.get_top_of_buy_book();
                 self.remove_order(order_book_location);

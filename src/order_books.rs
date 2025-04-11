@@ -4,24 +4,35 @@ use std::collections::HashMap;
 
 use crate::{order_book::OrderBook, order::{NewOrder, CancelOrder}, order_result::OrderResult};
 
-/// Hold a colection of orderbooks in a hashmap and track whether trading mode is enabled
+struct OrderBooksLocation {
+    symbol: String,
+    side: char,
+    price: u64
+}
+
+impl OrderBooksLocation {
+    fn new(symbol: &str, side: char, price: u64) -> OrderBooksLocation {
+        OrderBooksLocation { symbol: symbol.to_string(), side, price }
+    }
+}
+
 pub struct OrderBooks {
-    /// A hashmap where the key is a stock symbol (Ex. AAPL) and the value is an `OrderBook`
     all_orders: HashMap<String, OrderBook>,
-    trading_enabled: bool
+    trading_enabled: bool,
+    order_metadata: HashMap<(u64, u64), OrderBooksLocation>
 }
 
 impl OrderBooks {
     pub fn new(trading_enabled: bool) -> OrderBooks {
         OrderBooks {
             all_orders: HashMap::new(),
-            trading_enabled
+            trading_enabled,
+            order_metadata: HashMap::new()
         }
     }
 
-    /// Locate the proper `OrderBook` for the new order or create if not already existing for that 
-    /// symbol. 
     pub fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
+        self.order_metadata.insert((new_order.user, new_order.user_order_id), OrderBooksLocation::new(&new_order.symbol, new_order.side, new_order.price));
         if let Some(v) = self.all_orders.get_mut(&new_order.symbol) {
             v.add_order(new_order)
         } else {
@@ -33,13 +44,12 @@ impl OrderBooks {
         }
     }
 
-    /// Search through each `OrderBook` attempting to cancel an existing order
     pub fn cancel_order(&mut self, cancel_order: CancelOrder) -> Vec<OrderResult> {
-        let mut order_results: Vec<OrderResult> = vec![];
+        let mut order_results = vec![OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id }];
         
-        for order_book in self.all_orders.values_mut() {
-            order_results.append(&mut order_book.cancel_order(&cancel_order));
-        }
+        let order_books_location = self.order_metadata.get(&(cancel_order.user, cancel_order.user_order_id)).unwrap();
+        let order_book = self.all_orders.get_mut(&order_books_location.symbol).unwrap();
+        order_results.append(&mut order_book.cancel_order(&cancel_order, order_books_location.side, order_books_location.price));
 
         order_results
     }

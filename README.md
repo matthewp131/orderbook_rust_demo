@@ -58,8 +58,6 @@ The output may contain the following:
     ```
     A, 1, 1
     ```
-    In the future it would be helpful to provide distinct messages for new order accepted and existing order cancelled.
-
 1. A change at the top of the book for the Buy or Sell side: B, side('B' or 'S'), price(int), totalQuantity(int). For example:
     ```
     B, B, 10, 100
@@ -86,6 +84,6 @@ Under the current implementation, orders are only stored in one data structure e
 #### Time Complexity
 At the `OrderBooks` level, because the symbol associated with the cancellation (user, user_order_id) is not known (See discussion in [Unit tests](#unit-tests) above regarding potential optimization), the cancellation must be attempted against each symbol, an O(n) operation. Within each `OrderBook`, the attempt at cancellation is O(n*m), searching through every order at every price level. 
 
-This appears terribly inefficient, which is why I added order metadata in the branch "optimize-order-cancellation", specifically commit 3c7d53248317bc717e31f384f5c5d88a3057542a, which reduces the time complexity to O(1) at the `OrderBooks` level and O(n) at the `OrderBook` level. However, I did not see shorter run times in unit tests on my machine. That could be an artifact of poor system timing on Windows, and I really expect that for large volumes of trades, the optimizations on the "optimize-order-cancellation" branch would be beneficial. This would require further investigation and experimentation.
+This appears terribly inefficient, which is why I added order metadata in the branch "optimize-order-cancellation", which reduces the time complexity to O(1) at the `OrderBooks` level and O(n) at the `OrderBook` level. However, I did not see shorter run times in unit tests on my machine. That could be an artifact of poor system timing on Windows, and I really expect that for large volumes of trades, the optimizations on the "optimize-order-cancellation" branch would be beneficial. This would require further investigation and experimentation.
 #### Space Complexity
 Cancelling an order removes its `ExistingOrder` from the proper `OrderBook`, and will remove the entire `Vec<ExistingOrder>` at that price level if it was the only entry.
