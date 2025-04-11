@@ -65,14 +65,31 @@ impl CancelOrder {
 
 enum OrderResult {
     Acknowledgement { user: u64, user_order_id: u64 },
-    Rejection { user: u64, user_order_id: u64 }
+    Rejection { user: u64, user_order_id: u64 },
+    TopOfBookChange { side: char, price: String, total_quantity: String }
 }
 
 impl ToString for OrderResult {
     fn to_string(&self) -> String {
         match self {
             Self::Acknowledgement { user, user_order_id } => format!("A, {}, {}", user, user_order_id),
-            Self::Rejection { user, user_order_id } => format!("R, {}, {}", user, user_order_id)
+            Self::Rejection { user, user_order_id } => format!("R, {}, {}", user, user_order_id),
+            Self::TopOfBookChange { side, price, total_quantity} => format!("B, {}, {}, {}", side, price, total_quantity)
+        }
+    }
+}
+
+#[derive(PartialEq)]
+struct TopOfBook {
+    price: Option<u64>,
+    total_quantity: Option<u64>
+}
+
+impl TopOfBook {
+    fn new(price: Option<u64>, total_quantity: Option<u64>) -> TopOfBook {
+        TopOfBook { 
+            price, 
+            total_quantity 
         }
     }
 }
@@ -130,27 +147,83 @@ impl OrderBook {
         }
     }
 
+    fn get_top_of_buy_book(&self) -> TopOfBook {
+        if self.buy_orders.is_empty() {
+            TopOfBook::new(None, None)
+        } else {
+            let top = self.buy_orders.iter().rev().nth(0).unwrap();
+            let price = *top.0;
+            let totalQuantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
+            TopOfBook::new(Some(price), Some(totalQuantity))
+        }
+    }
+
     fn add_buy_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
+        let current_top = self.get_top_of_buy_book();
+        
         let mut order_results = vec![];
         order_results.push(OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id});
+        
         if let Some(v) = self.buy_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
             v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap());
         } else {
             self.buy_orders.insert(new_order.price, vec![ExistingOrder::new(new_order)]);
         }
+
+        let new_top = self.get_top_of_buy_book();
+        if new_top != current_top {
+            let price_string = match new_top.price {
+                Some(price) => price.to_string(),
+                None => "-".to_string()
+            };
+            let total_quantity_string = match new_top.total_quantity {
+                Some(total_quantity) => total_quantity.to_string(),
+                None => "-".to_string()
+            };
+            order_results.push(OrderResult::TopOfBookChange { side: 'B', price: price_string, total_quantity: total_quantity_string });
+        }
+
         order_results   
     }
 
+    fn get_top_of_sell_book(&self) -> TopOfBook {
+        if self.sell_orders.is_empty() {
+            TopOfBook::new(None, None)
+        } else {
+            let top = self.sell_orders.iter().nth(0).unwrap();
+            let price = *top.0;
+            let totalQuantity = top.1.iter().map(|existing_order| existing_order.qty).sum::<u64>();
+            TopOfBook::new(Some(price), Some(totalQuantity))
+        }
+    }
+
     fn add_sell_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
+        let current_top = self.get_top_of_buy_book();
+        
         let mut order_results = vec![];
         order_results.push(OrderResult::Acknowledgement{user: new_order.user, user_order_id: new_order.user_order_id});
+
         if let Some(v) = self.sell_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
             v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap().reverse());
         } else {
             self.sell_orders.insert(new_order.price, vec![ExistingOrder::new(new_order)]);
         }    
+
+        let new_top = self.get_top_of_sell_book();
+        if new_top != current_top {
+            let price_string = match new_top.price {
+                Some(price) => price.to_string(),
+                None => "-".to_string()
+            };
+            let total_quantity_string = match new_top.total_quantity {
+                Some(total_quantity) => total_quantity.to_string(),
+                None => "-".to_string()
+            };
+            order_results.push(OrderResult::TopOfBookChange { side: 'S', price: price_string, total_quantity: total_quantity_string });
+        }
+
         order_results  
     }
 
@@ -189,6 +262,10 @@ impl OrderBooks {
             self.all_orders.insert(new_symbol, new_order_book);
             order_results
         }
+    }
+
+    fn flush(&mut self) {
+        self.all_orders.clear()
     }
 }
 
@@ -229,7 +306,7 @@ fn main() {
                                         }
                                     },
                                     "C" => tx.send("C".to_string()).unwrap(),
-                                    "F" => tx.send("F".to_string()).unwrap(),
+                                    "F" => order_books.flush(),
                                     _ => ()
                                 }
                             }
