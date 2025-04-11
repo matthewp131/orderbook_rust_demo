@@ -60,21 +60,12 @@ impl OrderBook {
     }
 
     fn crosses_book(&self, new_order: &NewOrder) -> bool {
-        if new_order.side == 'B' {
-            if self.is_above_lowest_sell_price(new_order.price) {
-                true
-            } else {
-                false
-            }
-        } else if new_order.side == 'S' {
-            if self.is_below_highest_buy_price(new_order.price) {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
+        if new_order.side == 'B' && self.is_above_lowest_sell_price(new_order.price) {
+            return true;
+        } else if new_order.side == 'S' && self.is_below_highest_buy_price(new_order.price) {
+            return true;
         }
+        false
     }
 
     fn is_above_lowest_sell_price(&self, buy_price: u64) -> bool {
@@ -146,7 +137,7 @@ impl OrderBook {
 
         if let Some(v) = self.sell_orders.get_mut(&new_order.price) {
             v.push(ExistingOrder::new(new_order));
-            v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap().reverse());
+            v.sort_by(|a, b| a.time_received.partial_cmp(&b.time_received).unwrap());
         } else {
             self.sell_orders.insert(new_order.price, vec![ExistingOrder::new(new_order)]);
         }    
@@ -261,45 +252,44 @@ impl OrderBook {
         None
     }
 
-    fn clean_buy_orders(&mut self) {
-        let prices = self.buy_orders.iter()
-            .filter(|(_, existing_orders)| existing_orders.len() == 0)
-            .map(|(price, _)| *price).collect::<Vec<u64>>();
-        for price in prices {
-            self.buy_orders.remove(&price);
+    fn find_order_by_id(&self, user: u64, user_order_id: u64) -> Option<OrderBookLocation> {
+        for (price, existing_orders) in self.sell_orders.iter() {
+            for (index, existing_order) in existing_orders.iter().enumerate() {
+                if existing_order.user == user && existing_order.user_order_id == user_order_id {
+                    return Some(OrderBookLocation::new('S', *price, index));
+                }
+            }
         }
-    }
-
-    fn clean_sell_orders(&mut self) {
-        let prices = self.sell_orders.iter()
-            .filter(|(_, existing_orders)| existing_orders.len() == 0)
-            .map(|(price, _)| *price).collect::<Vec<u64>>();
-        for price in prices {
-            self.sell_orders.remove(&price);
+    
+        for (price, existing_orders) in self.buy_orders.iter() {
+            for (index, existing_order) in existing_orders.iter().enumerate() {
+                if existing_order.user == user && existing_order.user_order_id == user_order_id {
+                    return Some(OrderBookLocation::new('B', *price, index));
+                }
+            }
         }
+        None
     }
 
     pub fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
-        
-        let current_top = self.get_top_of_buy_book();
-        for existing_orders in self.buy_orders.values_mut() {
-            existing_orders.retain(|existing_order| !(existing_order.user == cancel_order.user && existing_order.user_order_id == cancel_order.user_order_id));
-        }
-        self.clean_buy_orders();
-        let new_top = self.get_top_of_buy_book();
-        if new_top != current_top {
-            order_results.push(new_top.to_order_result('B'));
-        }
-        
-        let current_top = self.get_top_of_sell_book();
-        for existing_orders in self.sell_orders.values_mut() {
-            existing_orders.retain(|existing_order| !(existing_order.user == cancel_order.user && existing_order.user_order_id == cancel_order.user_order_id));
-        }
-        self.clean_sell_orders();
-        let new_top = self.get_top_of_sell_book();
-        if new_top != current_top {
-            order_results.push(new_top.to_order_result('S'));
+
+        if let Some(order_book_location) = self.find_order_by_id(cancel_order.user, cancel_order.user_order_id) {
+            if order_book_location.side == 'B' {
+                let current_top = self.get_top_of_buy_book();
+                self.remove_order(order_book_location);
+                let new_top = self.get_top_of_buy_book();
+                if new_top != current_top {
+                    order_results.push(new_top.to_order_result('B'));
+                }
+            } else if order_book_location.side == 'S' {
+                let current_top = self.get_top_of_sell_book();
+                self.remove_order(order_book_location);
+                let new_top = self.get_top_of_sell_book();
+                if new_top != current_top {
+                    order_results.push(new_top.to_order_result('S'));
+                }
+            }
         }
 
         order_results
