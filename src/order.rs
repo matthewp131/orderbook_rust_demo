@@ -1,5 +1,9 @@
+//! Order structs corresponding to New Order and Cancel Order transaction requests, as well as the ExistingOrder struct
+//! for storing orders in memory
+
 use chrono::{DateTime, Utc};
 
+/// A request to place a new order into OrderBooks
 #[derive(Clone)]
 pub struct NewOrder {
     pub user: u64,
@@ -17,6 +21,7 @@ impl NewOrder {
     }
 }
 
+/// The format of an order inside of a single Orderbook
 #[derive(Debug)]
 pub struct ExistingOrder {
     pub user: u64,
@@ -38,6 +43,7 @@ impl ExistingOrder {
     }
 }
 
+/// The format of an order cancellation request
 #[derive(Clone)]
 pub struct CancelOrder {
     pub user: u64,

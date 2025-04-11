@@ -1,3 +1,5 @@
+//! An order book for one symbol, managing both buy and sell orders
+
 use std::collections::BTreeMap;
 
 use crate::{order_result::OrderResult, order::{ExistingOrder, NewOrder, CancelOrder}};
@@ -39,10 +41,12 @@ impl OrderBookLocation {
     }
 }
 
+/// Maintains a buy and sell book for a given symbol
 pub struct OrderBook {
     _symbol: String,
-    // key is price; Vec<ExistingOrder> is sorted by time_received
+    /// key is price; `Vec<ExistingOrder>` is sorted by time_received
     buy_orders: BTreeMap<u64, Vec<ExistingOrder>>,
+    /// key is price; `Vec<ExistingOrder>` is sorted by time_received
     sell_orders: BTreeMap<u64, Vec<ExistingOrder>>,
     trading_enabled: bool
 }
@@ -57,6 +61,8 @@ impl OrderBook {
         }
     }
 
+    /// Identify whether a new sell order is below the highest buy or a new buy order is above
+    /// the highest sell
     fn crosses_book(&self, new_order: &NewOrder) -> bool {
         if new_order.side == 'B' && self.is_above_lowest_sell_price(new_order.price) {
             return true;
@@ -66,6 +72,7 @@ impl OrderBook {
         false
     }
 
+    /// Is `buy_price` above lowest price in `sell_orders`
     fn is_above_lowest_sell_price(&self, buy_price: u64) -> bool {
         if self.sell_orders.len() == 0 {
             false
@@ -75,6 +82,7 @@ impl OrderBook {
         }
     }
 
+    /// Is `sell_price` below highest price in `buy_orders`
     fn is_below_highest_buy_price(&self, sell_price: u64) -> bool {
         if self.buy_orders.len() == 0 {
             false
@@ -84,6 +92,7 @@ impl OrderBook {
         }
     }
 
+    /// Get the highest price and quantity in `buy_orders`
     fn get_top_of_buy_book(&self) -> TopOfBook {
         if self.buy_orders.is_empty() {
             TopOfBook::new('B', None, None)
@@ -95,6 +104,7 @@ impl OrderBook {
         }
     }
 
+    /// Add a new buy order to `buy_orders`, making a new price entry if needed.
     fn add_buy_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         let current_top = self.get_top_of_buy_book();
         
@@ -116,6 +126,7 @@ impl OrderBook {
         order_results
     }
 
+    /// Get the lowest price and quantity in `sell_orders`
     fn get_top_of_sell_book(&self) -> TopOfBook {
         if self.sell_orders.is_empty() {
             TopOfBook::new('S', None, None)
@@ -127,6 +138,7 @@ impl OrderBook {
         }
     }
 
+    /// Add a new sell order to `sell_orders`, making a new price entry if needed.
     fn add_sell_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         let current_top = self.get_top_of_sell_book();
         
@@ -148,6 +160,9 @@ impl OrderBook {
         order_results  
     }
 
+    /// Adds order to proper side (buy or sell) of book. When trading is disabled, attempting
+    /// to cross the book results in rejection. When trading is enabled, crossing the book will
+    /// result in a matched trade.
     pub fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         assert!(new_order.side == 'B' || new_order.side == 'S', "Invalid New Order. New order must be B or S.");
         if self.crosses_book(&new_order) {
@@ -165,6 +180,7 @@ impl OrderBook {
         }
     }
 
+    /// Find a matching order for `new_order` on the other side of the `OrderBook`
     fn attempt_order_match(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
 
@@ -207,6 +223,8 @@ impl OrderBook {
         order_results
     }
 
+    /// Remove an order at a given `OrderBookLocation`, and then delete the key for that price if
+    /// `Vec<ExistingOrder>` at that price is now empty.
     fn remove_order(&mut self, order_book_location: OrderBookLocation) -> ExistingOrder {
         if order_book_location.side == 'B' {
             let vec = self.buy_orders.get_mut(&order_book_location.price).unwrap();
@@ -225,6 +243,8 @@ impl OrderBook {
         }
     }
 
+    /// Match a `NewOrder` for one side of the book to an existing order on the other
+    /// side of the book.
     fn match_order(&self, new_order: &NewOrder, side: char) -> Option<OrderBookLocation> {
         if side == 'S' {
             for (price, existing_orders) in self.sell_orders.iter() {
@@ -250,6 +270,7 @@ impl OrderBook {
         None
     }
 
+    /// Find an order in this `OrderBook` by `user` and `user_order_id`
     fn find_order_by_id(&self, user: u64, user_order_id: u64) -> Option<OrderBookLocation> {
         for (price, existing_orders) in self.sell_orders.iter() {
             for (index, existing_order) in existing_orders.iter().enumerate() {
@@ -269,6 +290,8 @@ impl OrderBook {
         None
     }
 
+    /// Search for order matching `cancel_order` in this `OrderBook` and remove the
+    /// order if found.
     pub fn cancel_order(&mut self, cancel_order: &CancelOrder) -> Vec<OrderResult> {
         let mut order_results = vec![];
 

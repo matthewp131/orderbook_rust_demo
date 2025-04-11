@@ -1,8 +1,12 @@
+//! All order books, managed by symbol
+
 use std::collections::HashMap;
 
 use crate::{order_book::OrderBook, order::{NewOrder, CancelOrder}, order_result::OrderResult};
 
+/// Hold a colection of orderbooks in a hashmap and track whether trading mode is enabled
 pub struct OrderBooks {
+    /// A hashmap where the key is a stock symbol (Ex. AAPL) and the value is an `OrderBook`
     all_orders: HashMap<String, OrderBook>,
     trading_enabled: bool
 }
@@ -15,6 +19,8 @@ impl OrderBooks {
         }
     }
 
+    /// Locate the proper `OrderBook` for the new order or create if not already existing for that 
+    /// symbol. 
     pub fn add_order(&mut self, new_order: NewOrder) -> Vec<OrderResult> {
         if let Some(v) = self.all_orders.get_mut(&new_order.symbol) {
             v.add_order(new_order)
@@ -27,6 +33,7 @@ impl OrderBooks {
         }
     }
 
+    /// Search through each `OrderBook` attempting to cancel an existing order
     pub fn cancel_order(&mut self, cancel_order: CancelOrder) -> Vec<OrderResult> {
         let mut order_results = vec![OrderResult::Acknowledgement { user: cancel_order.user, user_order_id: cancel_order.user_order_id }];
         
@@ -37,6 +44,7 @@ impl OrderBooks {
         order_results
     }
 
+    /// Flush all `OrderBook`s
     pub fn flush(&mut self) {
         self.all_orders.clear()
     }

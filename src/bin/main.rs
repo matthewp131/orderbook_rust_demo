@@ -1,3 +1,5 @@
+//! The main file, which handles program start-up and command line arguments
+
 use std::thread;
 use std::sync::{mpsc, mpsc::Sender};
 use orderbook::order_books::OrderBooks;
@@ -5,6 +7,7 @@ use std::env;
 use csv::StringRecord;
 use orderbook::order::{CancelOrder, NewOrder};
 
+/// Holds options passed as command line arguments
 struct RuntimeConfig {
     input_file: String,
     trading_enabled: bool
@@ -16,6 +19,7 @@ impl RuntimeConfig {
     }
 }
 
+/// Handles command line arguments
 fn parse_args(args: Vec<String>) -> RuntimeConfig {
     let mut trading_enabled = false;
     let mut input_file = String::new();
@@ -29,6 +33,8 @@ fn parse_args(args: Vec<String>) -> RuntimeConfig {
     RuntimeConfig::new(input_file, trading_enabled)
 }
 
+/// Takes each row from the input CSV, outputs name or descr directly, and otherwise
+/// parses transaction input messages.
 fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBooks) {
     if let Some(value) = row.get(0) {                          
         if value.starts_with("#name: ") {
@@ -75,6 +81,10 @@ fn handle_row(row: StringRecord, tx: &Sender<String>, order_books: &mut OrderBoo
     }
 }
 
+/// The main function takes in command line arguments, starts a reader thread which handles
+/// the input csv row-by-row, outputting the results over a Sender to the writer thread.
+/// The writer thread receives results and writes them to stdout. The program waits for both threads 
+/// to finish before exiting.
 fn main() {
     let runtime_config = parse_args(env::args().collect());
 
